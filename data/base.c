@@ -54,11 +54,11 @@ PVOID SC_Address(PVOID NtApiAddress)
    #ifdef _WIN64
     // If the process is 64-bit on a 64-bit OS, we need to search for syscall
     BYTE syscall_code[] = { 0x0f, 0x05, 0xc3 };
-    ULONG distance_to_syscall = 0x12;
+    ULONG distance_to_syscall[2] = {0x12, 0x8}; //in some ntdll version it is 8 distance 
    #else
     // If the process is 32-bit on a 32-bit OS, we need to search for sysenter
     BYTE syscall_code[] = { 0x0f, 0x34, 0xc3 };
-    ULONG distance_to_syscall = 0x0f;
+    ULONG distance_to_syscall[1] = {0x0f};
    #endif
 
   #ifdef _M_IX86
@@ -74,46 +74,49 @@ PVOID SC_Address(PVOID NtApiAddress)
 
     // we don't really care if there is a 'jmp' between
     // NtApiAddress and the 'syscall; ret' instructions
-    SyscallAddress = SW3_RVA2VA(PVOID, NtApiAddress, distance_to_syscall);
-
-    if (!memcmp((PVOID)syscall_code, SyscallAddress, sizeof(syscall_code)))
+    for(ULONG32 index = 0;index < _countof(distance_to_syscall); index++)
     {
-        // we can use the original code for this system call :)
-        #if defined(DEBUG)
-            printf("Found Syscall Opcodes at address 0x%p\n", SyscallAddress);
-        #endif
-        return SyscallAddress;
-    }
+        SyscallAddress = SW3_RVA2VA(PVOID, NtApiAddress, distance_to_syscall[index]);
 
-    // the 'syscall; ret' intructions have not been found,
-    // we will try to use one near it, similarly to HalosGate
-
-    for (ULONG32 num_jumps = 1; num_jumps < searchLimit; num_jumps++)
-    {
-        // let's try with an Nt* API below our syscall
-        SyscallAddress = SW3_RVA2VA(
-            PVOID,
-            NtApiAddress,
-            distance_to_syscall + num_jumps * 0x20);
         if (!memcmp((PVOID)syscall_code, SyscallAddress, sizeof(syscall_code)))
         {
-        #if defined(DEBUG)
-            printf("Found Syscall Opcodes at address 0x%p\n", SyscallAddress);
-        #endif
+            // we can use the original code for this system call :)
+            #if defined(DEBUG)
+                printf("Found Syscall Opcodes at address 0x%p\n", SyscallAddress);
+            #endif
             return SyscallAddress;
         }
 
-        // let's try with an Nt* API above our syscall
-        SyscallAddress = SW3_RVA2VA(
-            PVOID,
-            NtApiAddress,
-            distance_to_syscall - num_jumps * 0x20);
-        if (!memcmp((PVOID)syscall_code, SyscallAddress, sizeof(syscall_code)))
+        // the 'syscall; ret' intructions have not been found,
+        // we will try to use one near it, similarly to HalosGate
+
+        for (ULONG32 num_jumps = 1; num_jumps < searchLimit; num_jumps++)
         {
-        #if defined(DEBUG)
-            printf("Found Syscall Opcodes at address 0x%p\n", SyscallAddress);
-        #endif
-            return SyscallAddress;
+            // let's try with an Nt* API below our syscall
+            SyscallAddress = SW3_RVA2VA(
+                PVOID,
+                NtApiAddress,
+                distance_to_syscall[index] + num_jumps * 0x20);
+            if (!memcmp((PVOID)syscall_code, SyscallAddress, sizeof(syscall_code)))
+            {
+            #if defined(DEBUG)
+                printf("Found Syscall Opcodes at address 0x%p\n", SyscallAddress);
+            #endif
+                return SyscallAddress;
+            }
+
+            // let's try with an Nt* API above our syscall
+            SyscallAddress = SW3_RVA2VA(
+                PVOID,
+                NtApiAddress,
+                distance_to_syscall[index] - num_jumps * 0x20);
+            if (!memcmp((PVOID)syscall_code, SyscallAddress, sizeof(syscall_code)))
+            {
+            #if defined(DEBUG)
+                printf("Found Syscall Opcodes at address 0x%p\n", SyscallAddress);
+            #endif
+                return SyscallAddress;
+            }
         }
     }
 
