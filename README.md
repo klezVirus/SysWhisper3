@@ -58,7 +58,7 @@ The help shows all the available commands and features of the tool:
 ```
 C:\>python syswhispers.py -h
 
-usage: syswhispers.py [-h] [-p PRESET] [-a {x86,x64}] [-m {embedded,egg_hunter,jumper,jumper_randomized}] [-f FUNCTIONS] -o OUT_FILE [--int2eh] [--wow64] [-v] [-d]
+usage: syswhispers.py [-h] [-p PRESET] [-a {x86,x64}] [-m {embedded,egg_hunter,jumper,jumper_randomized,vectored}] [-f FUNCTIONS] -o OUT_FILE [--int2eh] [--wow64] [-v] [-d]
 
 SysWhispers3 - SysWhispers on steroids
 
@@ -70,7 +70,7 @@ optional arguments:
                         Architecture
   -c {msvc,mingw,all}, --compiler {msvc,mingw,all}
                         Compiler
-  -m {embedded,egg_hunter,jumper,jumper_randomized}, --method {embedded,egg_hunter,jumper,jumper_randomized}
+  -m {embedded,egg_hunter,jumper,jumper_randomized,vectored}, --method {embedded,egg_hunter,jumper,jumper_randomized,vectored}
                         Syscall recovery method
   -f FUNCTIONS, --functions FUNCTIONS
                         Comma-separated functions

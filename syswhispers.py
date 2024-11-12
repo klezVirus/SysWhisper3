@@ -124,6 +124,7 @@ except ModuleNotFoundError:
         EGG_HUNTER = 1
         JUMPER = 2
         JUMPER_RANDOMIZED = 3
+        VECTORED = 4
 
         @classmethod
         def from_name_or_default(cls, name):
@@ -281,6 +282,9 @@ class SysWhispers(object):
 
 
     def validate(self):
+        if self.recovery == SyscallRecoveryType.VECTORED and self.arch != Arch.x64:
+            exit("[-] Vectored compatible only with x64 arch")
+        
         if self.recovery == SyscallRecoveryType.EGG_HUNTER:
             if self.compiler in [Compiler.All, Compiler.MINGW]:
                 # TODO: try to make the 'db' instruction work in MinGW
@@ -315,6 +319,8 @@ class SysWhispers(object):
                 base_source_contents = base_source_contents.replace('<BASENAME>', os.path.basename(basename), 1)
                 if self.recovery in [SyscallRecoveryType.JUMPER, SyscallRecoveryType.JUMPER_RANDOMIZED]:
                     base_source_contents = base_source_contents.replace("// JUMPER", "#define JUMPER")
+                elif self.recovery == SyscallRecoveryType.VECTORED:
+                    base_source_contents = base_source_contents.replace("// VECTORED", "#define VECTORED")
 
                 if self.wow64:
                     base_source_contents = base_source_contents.replace('// JUMP_TO_WOW32Reserved',
@@ -346,9 +352,14 @@ class SysWhispers(object):
                         output_source.write((self._get_function_asm_code_mingw(function_name) + '\n').encode())
                     output_source.write('#endif\n'.encode())
 
+                if self.recovery == SyscallRecoveryType.VECTORED:
+                    for function_name in function_names:
+                        output_source.write((self._get_function_vectored_code(function_name) + '\n\n').encode())
+
+
         basename_suffix = ''
         basename_suffix = basename_suffix.capitalize() if os.path.basename(basename).istitle() else basename_suffix
-        if self.compiler in [Compiler.All, Compiler.MSVC]:
+        if self.recovery != SyscallRecoveryType.VECTORED and self.compiler in [Compiler.All, Compiler.MSVC]:
             if self.arch in [Arch.Any, Arch.x64]:
                 # Write x64 ASM file
                 basename_suffix = f'_{basename_suffix}' if '_' in basename else basename_suffix
@@ -498,6 +509,53 @@ class SysWhispers(object):
         #     return "P" + self.prefix + "_" + _type[1:]
         #
         # return _type
+    
+    def _get_function_vectored_code(self, function_name: str) -> str:
+        # Check if given function is in syscall map.
+        if function_name not in self.prototypes:
+            raise ValueError('Invalid function name provided.')
+
+        function_hash = self._get_function_hash(function_name)
+        num_params = len(self.prototypes[function_name]['params'])
+        func_body = f'NTSTATUS {self.prefix.capitalize()}{function_name}('
+        if num_params:
+            for i in range(num_params):
+                param = self.prototypes[function_name]['params'][i]
+
+                _type = self._fix_type(param['type'])
+
+                func_body += '\n\t'
+                func_body += f'{_type} {param["name"]}'
+                func_body += ',' if i < num_params - 1 else ')'
+        else:
+            func_body += ')'
+        
+        func_body += '\n{\n'
+        func_body += '\tPVOID funcAddr, syscAddr;\n'
+        func_body += '\tCONTEXT threadCtx;\n'
+        func_body += '\tthreadCtx.ContextFlags = CONTEXT_ALL;\n'
+        func_body += '\tif (!GetThreadContext((HANDLE)-2, &threadCtx))\n'
+        func_body += '\t\treturn 1;\n'
+        func_body += f'\tfuncAddr = SW3_GetFunctionAddress(0x{function_hash:08X});\n'        
+        func_body += f'\tsyscAddr = SW3_GetSyscallAddress(0x{function_hash:08X});\n'            
+        func_body += f'\tUpdateAddresses((BYTE*)funcAddr, syscAddr, SW3_GetSyscallNumber(0x{function_hash:08X}));\n'
+        func_body += '\tEnableBreakpoint(&threadCtx, EXCP_ADDR);\n'
+        func_body += '\tSetThreadContext((HANDLE)-2, &threadCtx);\n'
+        
+        func_body += f'\treturn ((NTSTATUS (*)('
+        if num_params:
+            for i in range(num_params):
+                param = self.prototypes[function_name]['params'][i]
+                func_body += f'{param["type"]}'
+                func_body += ',' if i < num_params - 1 else ')'
+            func_body += ')(funcAddr))('
+            for i in range(num_params):
+                param = self.prototypes[function_name]['params'][i]
+                func_body += f'{param["name"]}'
+                func_body += ',' if i < num_params - 1 else ');'
+        func_body += '\n}'
+        
+        return func_body      
 
     def _get_function_prototype(self, function_name: str) -> str:
         # Check if given function is in syscall map.
@@ -811,7 +869,7 @@ if __name__ == '__main__':
     parser.add_argument('-c', '--compiler', default="msvc", choices=["msvc", "mingw", "all"], help='Compiler',
                         required=False)
     parser.add_argument('-m', '--method', default="embedded",
-                        choices=["embedded", "egg_hunter", "jumper", "jumper_randomized"],
+                        choices=["embedded", "egg_hunter", "jumper", "jumper_randomized", "vectored"],
                         help='Syscall recovery method', required=False)
     parser.add_argument('-f', '--functions', help='Comma-separated functions', required=False)
     parser.add_argument('-o', '--out-file', help='Output basename (w/o extension)', required=True)
