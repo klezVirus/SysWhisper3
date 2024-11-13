@@ -120,12 +120,7 @@ BOOL SW3_Init()
 }
 #endif
 
-#ifndef JUMPER
-PVOID SC_Address(PVOID NtApiAddress)
-{
-    return NULL;
-}
-#else
+#if defined(JUMPER) || defined(VECTORED)
 PVOID SC_Address(PVOID NtApiAddress)
 {
     DWORD searchLimit = 512;
@@ -203,8 +198,12 @@ PVOID SC_Address(PVOID NtApiAddress)
 
     return NULL;
 }
+#else
+PVOID SC_Address(PVOID NtApiAddress)
+{
+    return NULL;
+}
 #endif
-
 
 BOOL SW3_PopulateSyscallList()
 {
