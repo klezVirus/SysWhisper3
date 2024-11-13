@@ -24,9 +24,10 @@ typedef NTSTATUS* PNTSTATUS;
 
 typedef struct _SW3_SYSCALL_ENTRY
 {
-    DWORD Hash;
-    DWORD Address;
-	PVOID SyscallAddress;
+    DWORD 	Hash;
+    DWORD	Address;
+	PVOID	pAddress;
+	PVOID 	SyscallAddress;
 } SW3_SYSCALL_ENTRY, *PSW3_SYSCALL_ENTRY;
 
 typedef struct _SW3_SYSCALL_LIST
@@ -56,8 +57,12 @@ typedef struct _SW3_PEB {
 	PSW3_PEB_LDR_DATA Ldr;
 } SW3_PEB, *PSW3_PEB;
 
+BOOL SW3_Init();
 DWORD SW3_HashSyscall(PCSTR FunctionName);
 BOOL SW3_PopulateSyscallList();
+PVOID SW3_GetFunctionAddress(DWORD FunctionHash);
 EXTERN_C DWORD SW3_GetSyscallNumber(DWORD FunctionHash);
 EXTERN_C PVOID SW3_GetSyscallAddress(DWORD FunctionHash);
 EXTERN_C PVOID internal_cleancall_wow64_gate(VOID);
+
+
